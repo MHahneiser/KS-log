@@ -152,7 +152,7 @@
   .cell.today{outline:2px solid var(--brand);outline-offset:1px;}
   .cell .dot{position:absolute;bottom:5px;display:flex;gap:2px;}
   .cell .dot i{width:5px;height:5px;border-radius:50%;background:var(--brand);display:block;}
-  .cell .pmark{position:absolute;top:3px;right:5px;font-size:9px;font-weight:800;color:#c2410c;}
+  .cell .chk{position:absolute;top:2px;left:4px;font-size:9px;font-weight:800;color:#2bb673;}
   .cell .daynum{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.25);}
   .cell.nodata .daynum{color:var(--ink-soft);text-shadow:none;}
 
@@ -200,6 +200,54 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
 
   .empty{text-align:center;color:var(--ink-soft);padding:28px 10px;font-size:14px;}
+
+  /* Report overlay (in-app, always light = print preview) */
+  #reportOverlay{position:fixed;inset:0;z-index:70;background:#ece9e3;display:none;flex-direction:column;}
+  #reportOverlay.show{display:flex;}
+  .rep-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:calc(var(--safe-top) + 10px) 16px 10px;background:#fff;border-bottom:1px solid #d9d3c8;box-shadow:0 1px 6px rgba(0,0,0,.06);}
+  .rep-back{font-size:17px;font-weight:600;color:#0f766e;padding:8px 6px;}
+  .rep-print{background:#0f766e;color:#fff;border-radius:11px;padding:11px 16px;font-weight:650;font-size:15px;}
+  #reportContent{overflow:auto;-webkit-overflow-scrolling:touch;padding:18px 16px calc(var(--safe-bottom) + 30px);color:#1c2530;}
+  #reportContent .rdoc{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;padding:22px 20px;box-shadow:0 6px 22px rgba(0,0,0,.08);}
+  #reportContent .rtop{display:flex;justify-content:space-between;gap:14px;border-bottom:2px solid #0f766e;padding-bottom:10px;margin-bottom:14px}
+  #reportContent .rtop h1{font-size:20px;color:#0f766e;margin:0}
+  #reportContent .rtop .pl{font-size:11px;color:#555;white-space:pre-line;text-align:right;line-height:1.4}
+  #reportContent .pinfo{font-size:13px;margin-bottom:16px}
+  #reportContent .pinfo b{font-size:15px}
+  #reportContent .rsum{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  #reportContent .rsc{flex:1;min-width:120px;border:1px solid #e0dcd4;border-radius:9px;padding:10px 12px}
+  #reportContent .rsc .v{font-size:26px;font-weight:300;line-height:1}
+  #reportContent .rsc .k{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em;margin-top:4px}
+  #reportContent h2{font-size:13px;color:#0f766e;border-bottom:1px solid #e6e2da;padding-bottom:4px;margin:18px 0 10px}
+  #reportContent .rmoh{background:#fff4ec;border:1px solid #f0c39a;border-radius:8px;padding:9px 12px;color:#8a4412;font-size:12px;margin-bottom:12px;line-height:1.4}
+  #reportContent .heat{display:flex;flex-wrap:wrap;gap:10px}
+  #reportContent .mcal{border:1px solid #e6e2da;border-radius:8px;padding:7px 8px;width:calc(33.33% - 7px)}
+  #reportContent .mt{font-size:10px;font-weight:700;margin-bottom:4px;color:#333}
+  #reportContent .ptab{border-collapse:collapse;width:100%;table-layout:fixed}
+  #reportContent .ptab th{font-size:8px;color:#999;font-weight:600;padding:0 0 2px}
+  #reportContent .pc{font-size:9px;text-align:center;height:15px;border:.5px solid #eee;position:relative;border-radius:3px;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #reportContent .pc.empty{background:transparent;border:none}
+  #reportContent .pc .mm{position:absolute;bottom:-3px;left:1px;font-size:9px;color:#0f766e}
+  #reportContent .pc .ck{position:absolute;top:-2px;right:0;font-size:6px;color:#2bb673;font-weight:800}
+  #reportContent table.data{border-collapse:collapse;width:100%;font-size:12px}
+  #reportContent table.data th{background:#f2efe9;text-align:left;padding:5px 7px;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:#555}
+  #reportContent table.data td{padding:5px 7px;border-bottom:.5px solid #ececec;vertical-align:top}
+  #reportContent .rlegend{display:flex;align-items:center;gap:7px;font-size:10px;color:#666;margin:8px 0}
+  #reportContent .rlegbar{width:120px;height:8px;border-radius:5px;background:linear-gradient(90deg,#2bb673,#9fc93c,#f2c037,#ef8b3a,#e0524a);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #reportContent .rfoot{margin-top:18px;font-size:9px;color:#999;border-top:.5px solid #ddd;padding-top:7px}
+
+  @media print{
+    body > #app, nav.tabs, header.bar, .modal-back, .toast{display:none !important;}
+    #reportOverlay{position:static !important;display:block !important;background:#fff !important;}
+    .rep-top{display:none !important;}
+    #reportContent{overflow:visible !important;padding:0 !important;}
+    #reportContent .rdoc{box-shadow:none !important;border-radius:0 !important;max-width:none !important;padding:0 !important;}
+    #reportContent .mcal{width:calc(25% - 8px)}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+    @page{size:A4;margin:13mm}
+  }
 </style>
 </head>
 <body>
@@ -227,9 +275,9 @@
           <div class="scale-wrap">
             <svg class="face" id="face" viewBox="0 0 100 100" aria-hidden="true"></svg>
             <div class="scaleinfo">
-              <div class="painval num" id="painNum">5</div>
-              <div class="painlabel" id="painLbl">Normale Schmerzen</div>
-              <div class="painsub" id="painDesc">Spürbar, beeinträchtigt den Alltag mäßig</div>
+              <div class="painval num" id="painNum">—</div>
+              <div class="painlabel" id="painLbl">Noch nicht erfasst</div>
+              <div class="painsub" id="painDesc">Tippe auf die Skala, um die Stärke zu wählen.</div>
             </div>
           </div>
           <input type="range" min="0" max="10" step="1" value="5" class="slider" id="painRange">
@@ -247,10 +295,6 @@
       <div class="card">
         <h2>Notizen & Auslöser</h2>
         <textarea id="note" placeholder="z. B. Aura, Schlaf, Stress, Wetter, Trigger …"></textarea>
-        <div class="nopain-toggle" id="periodWrap" style="margin-top:14px;margin-bottom:0">
-          <div><strong>Periode (P)</strong><div class="sub">Markierung wie auf dem Papierbogen</div></div>
-          <label class="switch"><input type="checkbox" id="period"><span class="track"></span><span class="knob"></span></label>
-        </div>
       </div>
 
       <div class="savebar"><button class="btn" id="saveBtn">Eintrag speichern</button></div>
@@ -270,7 +314,7 @@
         </div>
         <div class="dow"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
         <div class="grid" id="calGrid"></div>
-        <div class="legend"><span>0</span><div class="bar"></div><span>10</span><span style="margin-left:8px;color:#c2410c;font-weight:700">P&nbsp;Periode</span></div>
+        <div class="legend"><span>0</span><div class="bar"></div><span>10</span><span style="margin-left:8px">✓&nbsp;schmerzfrei</span><span style="margin-left:8px;color:var(--brand)">•&nbsp;Medikament</span></div>
         <div class="hint">Tippe einen Tag an, um ihn zu öffnen oder zu bearbeiten.</div>
       </div>
     </section>
@@ -308,8 +352,8 @@
 
       <div class="card">
         <h2>Bericht für die Arztpraxis</h2>
-        <p class="sub" style="margin-bottom:12px">Erzeugt einen sauberen, vektorbasierten Ausdruck (Kalender‑Heatmap, Statistik, Medikationsliste). Auf dem iPhone: „Drucken“ öffnen → mit zwei Fingern aufziehen → Teilen → „In Dateien sichern“ ergibt ein PDF.</p>
-        <button class="btn" id="printBtn">Bericht öffnen / als PDF sichern</button>
+        <p class="sub" style="margin-bottom:12px">Öffnet eine saubere, vektorbasierte Vorschau (Kalender‑Heatmap, Statistik, Medikationsliste) direkt in der App — mit Zurück‑Knopf. Zum Speichern dort auf „Als PDF / Drucken" tippen; im iOS‑Druckdialog ergibt „In Dateien sichern" ein PDF.</p>
+        <button class="btn" id="printBtn">Bericht anzeigen</button>
       </div>
     </section>
 
@@ -319,11 +363,7 @@
         <h2>Patient & Praxis</h2>
         <label class="field"><span class="lbl">Name</span><input type="text" id="setName"></label>
         <label class="field"><span class="lbl">Geburtsdatum (optional)</span><input type="date" id="setDob"></label>
-        <label class="field"><span class="lbl">Praxis (erscheint im Bericht)</span><textarea id="setDoctor"></textarea></label>
-        <label class="field" style="margin-bottom:0">
-          <span class="lbl">Periode‑Markierung anzeigen</span>
-          <select id="setShowPeriod"><option value="1">Ja</option><option value="0">Nein</option></select>
-        </label>
+        <label class="field" style="margin-bottom:0"><span class="lbl">Praxis (erscheint im Bericht)</span><textarea id="setDoctor"></textarea></label>
       </div>
 
       <div class="card">
@@ -373,6 +413,14 @@
   </nav>
 </div>
 
+<div id="reportOverlay" aria-hidden="true">
+  <div class="rep-top">
+    <button id="reportBack" class="rep-back">‹ Zurück</button>
+    <button id="reportPrint" class="rep-print">Als PDF / Drucken</button>
+  </div>
+  <div id="reportContent"></div>
+</div>
+
 <div class="modal-back" id="modalBack"><div class="modal" id="modalBody"></div></div>
 <div class="toast" id="toast"></div>
 
@@ -404,7 +452,7 @@ const DEFAULTS={
   settings:{
     name:"", dob:"",
     doctor:"",
-    showPeriod:true, theme:"auto", remOn:false, remTime:"20:00"
+    theme:"auto", remOn:false, remTime:"20:00"
   }
 };
 
@@ -483,9 +531,24 @@ function switchTab(t){
 /* ---------------- LOG view ---------------- */
 let curDate=todayStr();
 let draftMeds=[]; // [{name,dose,time}]
+let painSet=false; // true once an intensity has been chosen for the current day
 const $=id=>document.getElementById(id);
 
+function faceNeutral(){
+  const c="#9aa4ad";
+  return `<circle cx="50" cy="50" r="46" fill="none" stroke="${c}" stroke-width="2.4" stroke-dasharray="4 4"/>
+          <circle cx="37" cy="44" r="4.2" fill="${c}"/><circle cx="63" cy="44" r="4.2" fill="${c}"/>
+          <path d="M34 66 H66" stroke="${c}" stroke-width="3.2" fill="none" stroke-linecap="round"/>`;
+}
 function updateFace(){
+  if($("hasPain").checked && !painSet){
+    $("face").innerHTML=faceNeutral();
+    $("painNum").textContent="—";
+    $("painNum").style.color="var(--ink-soft)";
+    $("painLbl").textContent="Noch nicht erfasst";
+    $("painDesc").textContent="Tippe auf die Skala, um die Stärke zu wählen.";
+    return;
+  }
   const v=+$("painRange").value;
   $("face").innerHTML=faceSVG(v);
   $("painNum").textContent=v;
@@ -493,10 +556,11 @@ function updateFace(){
   $("painLbl").textContent=PAIN_LABELS[v][0];
   $("painDesc").textContent=PAIN_LABELS[v][1];
 }
-$("painRange").addEventListener("input",updateFace);
+$("painRange").addEventListener("input",()=>{painSet=true;updateFace();});
 $("hasPain").addEventListener("change",()=>{
   $("painBlock").style.opacity=$("hasPain").checked?"1":".4";
   $("painBlock").style.pointerEvents=$("hasPain").checked?"auto":"none";
+  updateFace();
 });
 $("logDate").addEventListener("change",()=>{curDate=$("logDate").value;loadEntryToForm();});
 
@@ -540,13 +604,12 @@ function loadEntryToForm(){
   const e=DB.entries[curDate];
   if(e){
     $("hasPain").checked=e.pain!=null;
-    if(e.pain!=null){$("painRange").value=e.pain;}
+    if(e.pain!=null){$("painRange").value=e.pain;painSet=true;}else{painSet=false;}
     $("note").value=e.note||"";
-    $("period").checked=!!e.period;
     draftMeds=(e.meds||[]).map(m=>({...m}));
     $("deleteEntryBtn").style.display="block";
   }else{
-    $("hasPain").checked=true;$("painRange").value=5;$("note").value="";$("period").checked=false;draftMeds=[];
+    $("hasPain").checked=true;$("painRange").value=5;painSet=false;$("note").value="";draftMeds=[];
     $("deleteEntryBtn").style.display="none";
   }
   $("hasPain").dispatchEvent(new Event("change"));
@@ -554,16 +617,19 @@ function loadEntryToForm(){
 }
 $("saveBtn").addEventListener("click",()=>{
   const hp=$("hasPain").checked;
+  if(hp && !painSet && draftMeds.length===0 && !$("note").value.trim()){
+    toast("Bitte Stärke wählen oder „schmerzfrei“");return;
+  }
   DB.entries[curDate]={
-    pain: hp? +$("painRange").value : null,
+    pain: (hp && painSet)? +$("painRange").value : null,
     note: $("note").value.trim(),
-    period: $("period").checked,
     meds: draftMeds.map(m=>({name:m.name,dose:m.dose||"",time:m.time||""})),
+    free: !hp,            // explicitly marked pain-free
     ts: Date.now()
   };
   // drop fully-empty entries
   const e=DB.entries[curDate];
-  if(e.pain==null && !e.note && !e.period && e.meds.length===0){delete DB.entries[curDate];}
+  if(e.pain==null && !e.free && !e.note && e.meds.length===0){delete DB.entries[curDate];}
   save();toast("Gespeichert ✓");$("deleteEntryBtn").style.display=DB.entries[curDate]?"block":"none";
 });
 $("deleteEntryBtn").addEventListener("click",()=>{
@@ -589,7 +655,7 @@ function renderCalendar(){
     if(key===todayStr())c.classList.add("today");
     let inner=`<span class="daynum num">${d}</span>`;
     if(e){
-      if(e.period&&DB.settings.showPeriod)inner+=`<span class="pmark">P</span>`;
+      if(e.pain==null)inner+=`<span class="chk">✓</span>`; // logged but pain-free
       if(e.meds&&e.meds.length)inner+=`<span class="dot"><i></i></span>`;
     }
     c.innerHTML=inner;
@@ -670,9 +736,12 @@ function renderReport(){
   }
 }
 
-/* ---------------- PRINT REPORT (vector PDF) ---------------- */
-$("printBtn").addEventListener("click",buildPrint);
-function buildPrint(){
+/* ---------------- REPORT VIEW (in-app, vektor-PDF via Druck) ---------------- */
+$("printBtn").addEventListener("click",openReport);
+$("reportBack").addEventListener("click",closeReport);
+$("reportPrint").addEventListener("click",()=>window.print());
+function closeReport(){document.getElementById("reportOverlay").classList.remove("show");document.body.style.overflow="";}
+function openReport(){
   const b=rangeBounds(curRange);
   const list=entriesInRange(b);
   const painDays=list.filter(e=>e.pain!=null&&e.pain>=1);
@@ -680,33 +749,30 @@ function buildPrint(){
   const avg=painDays.length?(painDays.reduce((s,e)=>s+e.pain,0)/painDays.length):null;
   const max=painDays.length?Math.max(...painDays.map(e=>e.pain)):null;
 
-  // month range for heatmap
   const fromD=parseYmd(b.from), toD=parseYmd(b.to);
   let months=[];let cur=new Date(fromD.getFullYear(),fromD.getMonth(),1);
   while(cur<=toD){months.push(new Date(cur));cur.setMonth(cur.getMonth()+1);}
-  if(months.length>14)months=months.slice(-14);
+  if(months.length>18)months=months.slice(-18);
 
   const heat=months.map(mDate=>{
     const y=mDate.getFullYear(),m=mDate.getMonth();
     const days=new Date(y,m+1,0).getDate();
-    let cells="";
     const startDow=(new Date(y,m,1).getDay()+6)%7;
     let cellsHtml="";
     for(let i=0;i<startDow;i++)cellsHtml+=`<td class="pc empty"></td>`;
     for(let d=1;d<=days;d++){
       const key=ymd(new Date(y,m,d));const e=DB.entries[key];
-      let bg="#fff",col="#444",pm="";
+      let bg="#fff",col="#444";
       if(e&&e.pain!=null){bg=painColor(e.pain);col="#fff";}
-      if(e&&e.period&&DB.settings.showPeriod)pm='<span class="pp">P</span>';
+      const ck=(e&&e.pain==null)?'<span class="ck">✓</span>':'';
       const md=(e&&e.meds&&e.meds.length)?'<span class="mm">•</span>':'';
-      cellsHtml+=`<td class="pc" style="background:${bg};color:${col}">${d}${pm}${md}</td>`;
+      cellsHtml+=`<td class="pc" style="background:${bg};color:${col}">${d}${ck}${md}</td>`;
       if((startDow+d)%7===0)cellsHtml+="</tr><tr>";
     }
     return `<div class="mcal"><div class="mt">${MONTHS[m]} ${y}</div>
       <table class="ptab"><tr><th>M</th><th>D</th><th>M</th><th>D</th><th>F</th><th>S</th><th>S</th></tr><tr>${cellsHtml}</tr></table></div>`;
   }).join("");
 
-  // medication list rows
   let medRows="";
   list.filter(e=>e.meds&&e.meds.length).forEach(e=>{
     e.meds.forEach((m,i)=>{
@@ -715,88 +781,42 @@ function buildPrint(){
   });
   if(!medRows)medRows=`<tr><td colspan="4" style="text-align:center;color:#888">Keine Medikamente erfasst</td></tr>`;
 
-  // pain day list
   let painRows="";
   painDays.slice().reverse().forEach(e=>{
-    painRows+=`<tr><td>${fmtDate(e.date)}</td><td><b style="color:${painColor(e.pain)}">${e.pain}</b>/10</td><td>${e.period&&DB.settings.showPeriod?"P":""}</td><td>${escapeH(e.note||"")}</td></tr>`;
+    painRows+=`<tr><td>${fmtDate(e.date)}</td><td><b style="color:${painColor(e.pain)}">${e.pain}</b>/10</td><td>${escapeH(e.note||"")}</td></tr>`;
   });
-  if(!painRows)painRows=`<tr><td colspan="4" style="text-align:center;color:#888">Keine Kopfschmerztage im Zeitraum</td></tr>`;
+  if(!painRows)painRows=`<tr><td colspan="3" style="text-align:center;color:#888">Keine Kopfschmerztage im Zeitraum</td></tr>`;
 
   const perMonth={};medDays.forEach(e=>{const mm=e.date.slice(0,7);perMonth[mm]=(perMonth[mm]||0)+1;});
   const maxMonthMed=Object.values(perMonth).length?Math.max(...Object.values(perMonth)):0;
 
-  const html=`<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Kopfschmerz‑Bericht ${escapeH(DB.settings.name)}</title>
-  <style>
-    @page{size:A4;margin:14mm}
-    *{box-sizing:border-box}
-    body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1c2530;font-size:11px;margin:0;}
-    .doc{max-width:182mm;margin:0 auto}
-    .top{display:flex;justify-content:space-between;border-bottom:2px solid #0f766e;padding-bottom:8px;margin-bottom:14px}
-    .top h1{font-size:18px;margin:0;color:#0f766e}
-    .top .pl{font-size:11px;color:#555;white-space:pre-line;text-align:right}
-    .pinfo{font-size:12px;margin-bottom:14px}
-    .pinfo b{font-size:14px}
-    .summary{display:flex;gap:10px;margin-bottom:16px}
-    .sc{flex:1;border:1px solid #dcd8d0;border-radius:8px;padding:9px 11px}
-    .sc .v{font-size:22px;font-weight:300}
-    .sc .k{font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:.04em}
-    h2{font-size:12px;color:#0f766e;border-bottom:1px solid #e0ddd6;padding-bottom:3px;margin:16px 0 8px}
-    .moh{background:#fff4ec;border:1px solid #f0c39a;border-radius:7px;padding:8px 10px;color:#8a4412;font-size:10.5px;margin-bottom:12px}
-    .heat{display:flex;flex-wrap:wrap;gap:10px}
-    .mcal{border:1px solid #e6e2da;border-radius:7px;padding:6px 7px;width:calc(25% - 8px)}
-    .mt{font-size:9.5px;font-weight:700;margin-bottom:3px;color:#333}
-    .ptab{border-collapse:collapse;width:100%;table-layout:fixed}
-    .ptab th{font-size:7px;color:#999;font-weight:600;padding:0 0 2px}
-    .pc{font-size:8px;text-align:center;height:13px;border:.5px solid #eee;position:relative;border-radius:2px}
-    .pc.empty{background:transparent;border:none}
-    .pc .pp{position:absolute;top:-1px;right:0;font-size:5.5px;font-weight:800;color:#c2410c}
-    .pc .mm{position:absolute;bottom:-2px;left:1px;font-size:8px;color:#0f766e}
-    table.data{border-collapse:collapse;width:100%;font-size:10px}
-    table.data th{background:#f2efe9;text-align:left;padding:4px 6px;font-size:9px;text-transform:uppercase;letter-spacing:.03em;color:#555}
-    table.data td{padding:4px 6px;border-bottom:.5px solid #ececec;vertical-align:top}
-    .legend{display:flex;align-items:center;gap:6px;font-size:9px;color:#666;margin:8px 0}
-    .legbar{width:120px;height:7px;border-radius:4px;background:linear-gradient(90deg,#2bb673,#9fc93c,#f2c037,#ef8b3a,#e0524a)}
-    .foot{margin-top:18px;font-size:8.5px;color:#999;border-top:.5px solid #ddd;padding-top:6px}
-    @media print{.noprint{display:none}}
-  </style></head><body><div class="doc">
-    <div class="top">
-      <div><h1>Kopfschmerz‑Bericht</h1><div style="font-size:10px;color:#666">${fmtDate(b.from)} – ${fmtDate(b.to)}</div></div>
+  const html=`<div class="rdoc">
+    <div class="rtop">
+      <div><h1>Kopfschmerz-Bericht</h1><div style="font-size:11px;color:#666">${fmtDate(b.from)} – ${fmtDate(b.to)}</div></div>
       <div class="pl">${escapeH(DB.settings.doctor||"")}</div>
     </div>
-    <div class="pinfo"><b>${escapeH(DB.settings.name||"—")}</b>${DB.settings.dob?" · geb. "+fmtDate(DB.settings.dob):""}<br>
-      Erstellt am ${fmtDate(todayStr())}</div>
-
-    <div class="summary">
-      <div class="sc"><div class="v">${painDays.length}</div><div class="k">Kopfschmerztage</div></div>
-      <div class="sc"><div class="v">${medDays.length}</div><div class="k">Medikamententage</div></div>
-      <div class="sc"><div class="v">${avg!=null?avg.toFixed(1):"–"}</div><div class="k">Ø Intensität</div></div>
-      <div class="sc"><div class="v">${max!=null?max:"–"}</div><div class="k">Max. Intensität</div></div>
+    <div class="pinfo"><b>${escapeH(DB.settings.name||"—")}</b>${DB.settings.dob?" · geb. "+fmtDate(DB.settings.dob):""}<br>Erstellt am ${fmtDate(todayStr())}</div>
+    <div class="rsum">
+      <div class="rsc"><div class="v">${painDays.length}</div><div class="k">Kopfschmerztage</div></div>
+      <div class="rsc"><div class="v">${medDays.length}</div><div class="k">Medikamententage</div></div>
+      <div class="rsc"><div class="v">${avg!=null?avg.toFixed(1):"–"}</div><div class="k">Ø Intensität</div></div>
+      <div class="rsc"><div class="v">${max!=null?max:"–"}</div><div class="k">Max. Intensität</div></div>
     </div>
-    ${maxMonthMed>=10?`<div class="moh">Medikationstage (Maximum pro Monat): <b>${maxMonthMed}</b>. Hinweis auf möglichen Medikamentenübergebrauch ab ~10 (Triptane/Kombi) bzw. ~15 (einfache Analgetika) Tagen/Monat.</div>`:""}
-
-    <h2>Kalender‑Heatmap (Intensität 0–10)</h2>
-    <div class="legend">0<div class="legbar"></div>10 &nbsp;·&nbsp; <span style="color:#c2410c;font-weight:700">P</span>=Periode &nbsp;·&nbsp; <span style="color:#0f766e">•</span>=Medikament</div>
+    ${maxMonthMed>=10?`<div class="rmoh">Medikationstage (Maximum pro Monat): <b>${maxMonthMed}</b>. Hinweis auf möglichen Medikamentenübergebrauch ab ~10 (Triptane/Kombi) bzw. ~15 (einfache Analgetika) Tagen/Monat. Gesprächsgrundlage, keine Diagnose.</div>`:""}
+    <h2>Kalender-Heatmap (Intensität 0–10)</h2>
+    <div class="rlegend">0<div class="rlegbar"></div>10 &nbsp;·&nbsp; <span style="color:#2bb673;font-weight:700">✓</span>=schmerzfrei &nbsp;·&nbsp; <span style="color:#0f766e">•</span>=Medikament</div>
     <div class="heat">${heat}</div>
-
     <h2>Kopfschmerztage im Detail</h2>
-    <table class="data"><thead><tr><th>Datum</th><th>Stärke</th><th>P</th><th>Notiz / Auslöser</th></tr></thead><tbody>${painRows}</tbody></table>
-
+    <table class="data"><thead><tr><th>Datum</th><th>Stärke</th><th>Notiz / Auslöser</th></tr></thead><tbody>${painRows}</tbody></table>
     <h2>Medikation</h2>
     <table class="data"><thead><tr><th>Datum</th><th>Medikament</th><th>Dosis</th><th>Zeit</th></tr></thead><tbody>${medRows}</tbody></table>
+    <div class="rfoot">Erstellt mit dem Kopfschmerztagebuch (lokale App, offline). Selbstdokumentation des Patienten, keine ärztliche Diagnose.</div>
+  </div>`;
 
-    <div class="foot">Erstellt mit dem Kopfschmerztagebuch (lokale App, offline). Selbstdokumentation des Patienten, keine ärztliche Diagnose.</div>
-    <button class="noprint" onclick="window.print()" style="margin-top:16px;padding:12px 18px;background:#0f766e;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600">Drucken / als PDF sichern</button>
-  </div>
-  <script>setTimeout(function(){try{window.focus();}catch(e){}},200);<\/script>
-  </body></html>`;
-
-  const w=window.open("","_blank");
-  if(w){w.document.open();w.document.write(html);w.document.close();}
-  else{ // fallback: blob download
-    const blob=new Blob([html],{type:"text/html"});const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="Kopfschmerz-Bericht.html";a.click();
-    toast("Bericht als Datei gesichert");
-  }
+  $("reportContent").innerHTML=html;
+  $("reportContent").scrollTop=0;
+  document.getElementById("reportOverlay").classList.add("show");
+  document.body.style.overflow="hidden";
 }
 
 /* ---------------- SETTINGS ---------------- */
@@ -804,7 +824,6 @@ function renderSettings(){
   $("setName").value=DB.settings.name||"";
   $("setDob").value=DB.settings.dob||"";
   $("setDoctor").value=DB.settings.doctor||"";
-  $("setShowPeriod").value=DB.settings.showPeriod?"1":"0";
   $("setTheme").value=DB.settings.theme||"auto";
   $("remOn").checked=!!DB.settings.remOn;
   $("remTime").value=DB.settings.remTime||"20:00";
@@ -813,7 +832,6 @@ function renderSettings(){
 ["setName","setDob","setDoctor"].forEach(id=>$(id).addEventListener("input",()=>{
   DB.settings.name=$("setName").value;DB.settings.dob=$("setDob").value;DB.settings.doctor=$("setDoctor").value;save();
 }));
-$("setShowPeriod").addEventListener("change",()=>{DB.settings.showPeriod=$("setShowPeriod").value==="1";save();$("periodWrap").style.display=DB.settings.showPeriod?"flex":"none";});
 $("setTheme").addEventListener("change",()=>{DB.settings.theme=$("setTheme").value;save();applyTheme();});
 $("remTime").addEventListener("change",()=>{DB.settings.remTime=$("remTime").value;save();scheduleReminder();});
 $("remOn").addEventListener("change",async ()=>{
@@ -859,11 +877,11 @@ $("exportJson").addEventListener("click",()=>{
   toast("Backup erstellt");
 });
 $("exportCsv").addEventListener("click",()=>{
-  const rows=[["Datum","Intensitaet_0_10","Periode","Medikamente","Notiz"]];
+  const rows=[["Datum","Intensitaet_0_10","Status","Medikamente","Notiz"]];
   Object.keys(DB.entries).sort().forEach(k=>{
     const e=DB.entries[k];
     const meds=(e.meds||[]).map(m=>`${m.name}${m.dose?" "+m.dose:""}${m.time?" ("+m.time+")":""}`).join("; ");
-    rows.push([k, e.pain==null?"":e.pain, e.period?"P":"", meds, (e.note||"").replace(/\n/g," ")]);
+    rows.push([k, e.pain==null?"":e.pain, (e.pain==null?"schmerzfrei":"Kopfschmerz"), meds, (e.note||"").replace(/\n/g," ")]);
   });
   const csv="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   download("kopfschmerztagebuch-"+todayStr()+".csv",csv,"text/csv");
@@ -949,7 +967,6 @@ function setupInstall(){
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme);
 applyTheme();
 setupInstall();
-$("periodWrap").style.display=DB.settings.showPeriod?"flex":"none";
 renderMedChips();
 loadEntryToForm();
 scheduleReminder();
