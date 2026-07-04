@@ -237,6 +237,7 @@
   #reportContent table.data{border-collapse:collapse;width:100%;font-size:12px}
   #reportContent table.data th{background:#f2efe9;text-align:left;padding:5px 7px;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;color:#555}
   #reportContent table.data td{padding:5px 7px;border-bottom:.5px solid #ececec;vertical-align:top}
+  #reportContent table.data tr.empty td{color:#bcbcbc}
   #reportContent .rlegend{display:flex;align-items:center;gap:7px;font-size:10px;color:#666;margin:8px 0}
   #reportContent .rlegbar{width:120px;height:8px;border-radius:5px;background:linear-gradient(90deg,#2bb673,#9fc93c,#f2c037,#ef8b3a,#e0524a);-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #reportContent .rfoot{margin-top:18px;font-size:9px;color:#999;border-top:.5px solid #ddd;padding-top:7px}
@@ -269,10 +270,7 @@
           <input type="date" id="logDate">
         </label>
 
-        <div class="nopain-toggle">
-          <div><strong>Kopfschmerzen heute</strong><div class="sub">Aus = schmerzfreier Tag</div></div>
-          <label class="switch"><input type="checkbox" id="hasPain" checked><span class="track"></span><span class="knob"></span></label>
-        </div>
+        <div style="margin-bottom:12px"><strong>Schmerzstärke heute</strong><div class="sub">Skala 0 = schmerzfrei · 10 = extrem</div></div>
 
         <div id="painBlock">
           <div class="scale-wrap">
@@ -416,7 +414,7 @@
         <button class="btn danger" id="wipeBtn">Alle Daten löschen</button>
       </div>
 
-      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.1</p>
+      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.2</p>
     </section>
   </main>
 
@@ -476,9 +474,11 @@ const DEFAULTS={
 
 let DB=load();
 function uid(){return Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);}
+// Migration: früherer „schmerzfrei"-Schalter (free:true) → Skalenwert 0; Feld free entfernen
+function normEntries(es){for(const k in es){const e=es[k];if(e&&e.pain==null&&e.free)e.pain=0;if(e&&"free" in e)delete e.free;}return es;}
 function load(){
   try{const raw=localStorage.getItem(KEY); if(!raw) return structuredClone(DEFAULTS);
-    const d=JSON.parse(raw); d.entries=d.entries||{}; d.meds=d.meds||[]; d.settings={...DEFAULTS.settings,...(d.settings||{})};
+    const d=JSON.parse(raw); d.entries=normEntries(d.entries||{}); d.meds=d.meds||[]; d.settings={...DEFAULTS.settings,...(d.settings||{})};
     d.meta={...DEFAULTS.meta,...(d.meta||{})}; d.deleted=d.deleted||{}; d.sync={...DEFAULTS.sync,...(d.sync||{})};
     return d;
   }catch(e){console.warn("load failed",e); return structuredClone(DEFAULTS);}
@@ -561,12 +561,12 @@ function faceNeutral(){
           <path d="M34 66 H66" stroke="${c}" stroke-width="3.2" fill="none" stroke-linecap="round"/>`;
 }
 function updateFace(){
-  if($("hasPain").checked && !painSet){
+  if(!painSet){
     $("face").innerHTML=faceNeutral();
     $("painNum").textContent="—";
     $("painNum").style.color="var(--ink-soft)";
     $("painLbl").textContent="Noch nicht erfasst";
-    $("painDesc").textContent="Tippe auf die Skala, um die Stärke zu wählen.";
+    $("painDesc").textContent="Tippe auf die Skala, um die Stärke zu wählen (0 = schmerzfrei).";
     return;
   }
   const v=+$("painRange").value;
@@ -577,11 +577,6 @@ function updateFace(){
   $("painDesc").textContent=PAIN_LABELS[v][1];
 }
 $("painRange").addEventListener("input",()=>{painSet=true;updateFace();});
-$("hasPain").addEventListener("change",()=>{
-  $("painBlock").style.opacity=$("hasPain").checked?"1":".4";
-  $("painBlock").style.pointerEvents=$("hasPain").checked?"auto":"none";
-  updateFace();
-});
 $("logDate").addEventListener("change",()=>{curDate=$("logDate").value;loadEntryToForm();});
 
 function renderMedChips(){
@@ -623,33 +618,29 @@ function loadEntryToForm(){
   $("logDate").value=curDate;
   const e=DB.entries[curDate];
   if(e){
-    $("hasPain").checked=e.pain!=null;
-    if(e.pain!=null){$("painRange").value=e.pain;painSet=true;}else{painSet=false;}
+    if(e.pain!=null){$("painRange").value=e.pain;painSet=true;}else{$("painRange").value=5;painSet=false;}
     $("note").value=e.note||"";
     draftMeds=(e.meds||[]).map(m=>({...m}));
     $("deleteEntryBtn").style.display="block";
   }else{
-    $("hasPain").checked=true;$("painRange").value=5;painSet=false;$("note").value="";draftMeds=[];
+    $("painRange").value=5;painSet=false;$("note").value="";draftMeds=[];
     $("deleteEntryBtn").style.display="none";
   }
-  $("hasPain").dispatchEvent(new Event("change"));
   updateFace();renderLoggedMeds();
 }
 $("saveBtn").addEventListener("click",()=>{
-  const hp=$("hasPain").checked;
-  if(hp && !painSet && draftMeds.length===0 && !$("note").value.trim()){
-    toast("Bitte Stärke wählen oder „schmerzfrei“");return;
+  if(!painSet && draftMeds.length===0 && !$("note").value.trim()){
+    toast("Bitte Stärke wählen (0 = schmerzfrei) oder Medikament/Notiz");return;
   }
   DB.entries[curDate]={
-    pain: (hp && painSet)? +$("painRange").value : null,
+    pain: painSet? +$("painRange").value : null,
     note: $("note").value.trim(),
     meds: draftMeds.map(m=>({name:m.name,dose:m.dose||"",time:m.time||""})),
-    free: !hp,            // explicitly marked pain-free
     ts: Date.now()
   };
   // drop fully-empty entries
   const e=DB.entries[curDate];
-  if(e.pain==null && !e.free && !e.note && e.meds.length===0){delete DB.entries[curDate];}
+  if(e.pain==null && !e.note && e.meds.length===0){delete DB.entries[curDate];}
   else if(DB.deleted[curDate]){delete DB.deleted[curDate];} // re-created -> clear tombstone
   save();toast("Gespeichert ✓");$("deleteEntryBtn").style.display=DB.entries[curDate]?"block":"none";
   scheduleSync();
@@ -673,12 +664,12 @@ function renderCalendar(){
     const key=ymd(new Date(calY,calM,d));
     const e=DB.entries[key];
     const c=document.createElement("div");c.className="cell";
-    if(e&&e.pain!=null){c.style.background=painColor(e.pain);}
+    if(e&&e.pain!=null&&e.pain>=1){c.style.background=painColor(e.pain);}
     else{c.classList.add("nodata");}
     if(key===todayStr())c.classList.add("today");
     let inner=`<span class="daynum num">${d}</span>`;
     if(e){
-      if(e.pain==null)inner+=`<span class="chk">✓</span>`; // logged but pain-free
+      if(e.pain===0)inner+=`<span class="chk">✓</span>`; // schmerzfrei (Skalenwert 0)
       if(e.meds&&e.meds.length)inner+=`<span class="dot"><i></i></span>`;
     }
     c.innerHTML=inner;
@@ -786,8 +777,8 @@ function openReport(){
     for(let d=1;d<=days;d++){
       const key=ymd(new Date(y,m,d));const e=DB.entries[key];
       let bg="#fff",col="#444";
-      if(e&&e.pain!=null){bg=painColor(e.pain);col="#fff";}
-      const ck=(e&&e.pain==null)?'<span class="ck">✓</span>':'';
+      if(e&&e.pain!=null&&e.pain>=1){bg=painColor(e.pain);col="#fff";}
+      const ck=(e&&e.pain===0)?'<span class="ck">✓</span>':'';
       const md=(e&&e.meds&&e.meds.length)?'<span class="mm">•</span>':'';
       cellsHtml+=`<td class="pc" style="background:${bg};color:${col}">${d}${ck}${md}</td>`;
       if((startDow+d)%7===0)cellsHtml+="</tr><tr>";
@@ -796,19 +787,33 @@ function openReport(){
       <table class="ptab"><tr><th>M</th><th>D</th><th>M</th><th>D</th><th>F</th><th>S</th><th>S</th></tr><tr>${cellsHtml}</tr></table></div>`;
   }).join("");
 
-  let medRows="";
-  list.filter(e=>e.meds&&e.meds.length).forEach(e=>{
-    e.meds.forEach((m,i)=>{
-      medRows+=`<tr><td>${i===0?fmtDate(e.date):""}</td><td>${escapeH(m.name)}</td><td>${escapeH(m.dose||"")}</td><td>${escapeH(m.time||"")}</td></tr>`;
-    });
-  });
-  if(!medRows)medRows=`<tr><td colspan="4" style="text-align:center;color:#888">Keine Medikamente erfasst</td></tr>`;
-
-  let painRows="";
-  painDays.slice().reverse().forEach(e=>{
-    painRows+=`<tr><td>${fmtDate(e.date)}</td><td><b style="color:${painColor(e.pain)}">${e.pain}</b>/10</td><td>${escapeH(e.note||"")}</td></tr>`;
-  });
-  if(!painRows)painRows=`<tr><td colspan="3" style="text-align:center;color:#888">Keine Kopfschmerztage im Zeitraum</td></tr>`;
+  // Kombinierte Tagestabelle: jeder Tag im Zeitraum, auch leere Tage
+  const WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
+  const allDates=Object.keys(DB.entries).sort();
+  const firstEntry=allDates.length?allDates[0]:null;
+  let startStr=b.from;
+  if(curRange==="all") startStr=firstEntry||todayStr();
+  else if(firstEntry && firstEntry>b.from) startStr=firstEntry; // keine leeren Tage vor dem ersten Eintrag
+  let dayRows="";
+  if(!firstEntry){
+    dayRows=`<tr><td colspan="4" style="text-align:center;color:#888">Noch keine Einträge erfasst</td></tr>`;
+  }else{
+    let dcur=parseYmd(startStr), dend=parseYmd(b.to);
+    while(dcur<=dend){
+      const key=ymd(dcur), e=DB.entries[key];
+      const dlabel=`${WD[dcur.getDay()]}, ${String(dcur.getDate()).padStart(2,"0")}.${String(dcur.getMonth()+1).padStart(2,"0")}.${dcur.getFullYear()}`;
+      let painCell="–", medCell="–", noteCell="", cls="";
+      if(e){
+        if(e.pain==null)painCell="–";
+        else if(e.pain===0)painCell='<span style="color:#2bb673;font-weight:700">0</span>';
+        else painCell=`<b style="color:${painColor(e.pain)}">${e.pain}</b>/10`;
+        if(e.meds&&e.meds.length)medCell=e.meds.map(m=>escapeH(m.name+(m.dose?" "+m.dose:"")+(m.time?" ("+m.time+")":""))).join("<br>");
+        noteCell=escapeH(e.note||"");
+      }else{cls=' class="empty"';}
+      dayRows+=`<tr${cls}><td style="white-space:nowrap">${dlabel}</td><td>${painCell}</td><td>${medCell}</td><td>${noteCell}</td></tr>`;
+      dcur.setDate(dcur.getDate()+1);
+    }
+  }
 
   const perMonth={};medDays.forEach(e=>{const mm=e.date.slice(0,7);perMonth[mm]=(perMonth[mm]||0)+1;});
   const maxMonthMed=Object.values(perMonth).length?Math.max(...Object.values(perMonth)):0;
@@ -829,10 +834,8 @@ function openReport(){
     <h2>Kalender-Heatmap (Intensität 0–10)</h2>
     <div class="rlegend">0<div class="rlegbar"></div>10 &nbsp;·&nbsp; <span style="color:#2bb673;font-weight:700">✓</span>=schmerzfrei &nbsp;·&nbsp; <span style="color:#0f766e">•</span>=Medikament</div>
     <div class="heat">${heat}</div>
-    <h2>Kopfschmerztage im Detail</h2>
-    <table class="data"><thead><tr><th>Datum</th><th>Stärke</th><th>Notiz / Auslöser</th></tr></thead><tbody>${painRows}</tbody></table>
-    <h2>Medikation</h2>
-    <table class="data"><thead><tr><th>Datum</th><th>Medikament</th><th>Dosis</th><th>Zeit</th></tr></thead><tbody>${medRows}</tbody></table>
+    <h2>Tagesübersicht (alle Tage im Zeitraum)</h2>
+    <table class="data"><thead><tr><th style="width:26%">Datum</th><th style="width:12%">Stärke</th><th style="width:37%">Medikamente</th><th style="width:25%">Notiz / Auslöser</th></tr></thead><tbody>${dayRows}</tbody></table>
     <div class="rfoot">Erstellt mit dem Kopfschmerztagebuch (lokale App, offline). Selbstdokumentation des Patienten, keine ärztliche Diagnose.</div>
   </div>`;
 
@@ -908,7 +911,8 @@ $("exportCsv").addEventListener("click",()=>{
   Object.keys(DB.entries).sort().forEach(k=>{
     const e=DB.entries[k];
     const meds=(e.meds||[]).map(m=>`${m.name}${m.dose?" "+m.dose:""}${m.time?" ("+m.time+")":""}`).join("; ");
-    rows.push([k, e.pain==null?"":e.pain, (e.pain==null?"schmerzfrei":"Kopfschmerz"), meds, (e.note||"").replace(/\n/g," ")]);
+    const status=e.pain==null?"":(e.pain===0?"schmerzfrei":"Kopfschmerz");
+    rows.push([k, e.pain==null?"":e.pain, status, meds, (e.note||"").replace(/\n/g," ")]);
   });
   const csv="﻿"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   download("kopfschmerztagebuch-"+todayStr()+".csv",csv,"text/csv");
@@ -927,7 +931,7 @@ $("fileIn").addEventListener("change",e=>{
         <p class="sub" style="margin-top:8px;color:#e0524a">Achtung: Die aktuellen Daten auf diesem Gerät werden vollständig ersetzt.</p>
         <div class="row" style="margin-top:14px"><button class="btn ghost" id="impCancel">Abbrechen</button><button class="btn" id="impGo">Ersetzen</button></div>`);
       $("impCancel").onclick=closeModal;
-      $("impGo").onclick=()=>{DB=d;DB.entries=DB.entries||{};DB.meds=DB.meds||[];DB.settings={...DEFAULTS.settings,...(DB.settings||{})};DB.meta={...DEFAULTS.meta,...(DB.meta||{})};DB.deleted=DB.deleted||{};DB.sync={...DEFAULTS.sync,...(DB.sync||{})};save();applyTheme();renderSettings();loadEntryToForm();closeModal();toast("Backup wiederhergestellt");};
+      $("impGo").onclick=()=>{DB=d;DB.entries=normEntries(DB.entries||{});DB.meds=DB.meds||[];DB.settings={...DEFAULTS.settings,...(DB.settings||{})};DB.meta={...DEFAULTS.meta,...(DB.meta||{})};DB.deleted=DB.deleted||{};DB.sync={...DEFAULTS.sync,...(DB.sync||{})};save();applyTheme();renderSettings();loadEntryToForm();closeModal();toast("Backup wiederhergestellt");};
     }catch(err){toast("Ungültige Backup‑Datei");}
     $("fileIn").value="";
   };
@@ -1031,7 +1035,7 @@ function mergeRemote(remote){
     if((del[k]||0)>=(cand.ts||0))return; // deleted after last edit
     merged[k]=cand;
   });
-  DB.entries=merged; DB.deleted=del;
+  DB.entries=normEntries(merged); DB.deleted=del;
   // meds library (whole-array, last edit wins)
   const lmu=DB.meta.medsUpdated||0, rmu=(remote.meta&&remote.meta.medsUpdated)||0;
   if(rmu>lmu&&Array.isArray(remote.meds)){DB.meds=remote.meds;DB.meta.medsUpdated=rmu;}
