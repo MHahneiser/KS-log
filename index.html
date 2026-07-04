@@ -293,6 +293,16 @@
         <div id="loggedMeds" style="margin-top:14px"></div>
       </div>
 
+      <div class="card" id="healthCard" style="display:none">
+        <h2>Gesundheit (Apple Health)</h2>
+        <div id="healthDisplay" class="sub">Noch keine Werte für heute.</div>
+        <div class="row" id="healthActions" style="margin-top:12px">
+          <button class="btn secondary" id="healthFetch">1 · Aus Health holen</button>
+          <button class="btn ghost" id="healthApply">2 · Übernehmen</button>
+        </div>
+        <div class="hint">Einmalig den Kurzbefehl „KS‑Health“ einrichten. Dann: „1“ tippen, kurz warten, bis der Kurzbefehl fertig ist, danach „2“ tippen. Übernimmt Schlaf, Blutdruck, Ruhepuls/HRV und Schritte in den heutigen Eintrag.</div>
+      </div>
+
       <div class="card">
         <h2>Notizen & Auslöser</h2>
         <textarea id="note" placeholder="z. B. Aura, Schlaf, Stress, Wetter, Trigger …"></textarea>
@@ -414,7 +424,7 @@
         <button class="btn danger" id="wipeBtn">Alle Daten löschen</button>
       </div>
 
-      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.2.1</p>
+      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.3</p>
     </section>
   </main>
 
@@ -551,6 +561,7 @@ function switchTab(t){
 /* ---------------- LOG view ---------------- */
 let curDate=todayStr();
 let draftMeds=[]; // [{name,dose,time}]
+let draftHealth=null; // {sleepH,bpSys,bpDia,restHR,hrv,steps} aus Apple Health
 let painSet=false; // true once an intensity has been chosen for the current day
 const $=id=>document.getElementById(id);
 
@@ -614,6 +625,53 @@ function customMedDialog(){
   $("cmSaveLib").onclick=()=>{const n=$("cmName").value.trim();if(!n)return toast("Name fehlt");const dose=$("cmDose").value.trim();draftMeds.push({name:n,dose,time:$("cmTime").value});DB.meds.push({id:uid(),name:n,dose});DB.meta.medsUpdated=Date.now();save();renderMedChips();renderLoggedMeds();closeModal();scheduleSync();};
 }
 
+/* ---------------- Gesundheit (Apple Health via Kurzbefehl) ---------------- */
+function fmtNum(n){return (Math.round(n*10)/10).toString().replace(".",",");}
+function healthSummary(h){
+  if(!h)return "";
+  const p=[];
+  if(h.sleepH!=null)p.push("Schlaf "+fmtNum(h.sleepH)+" h");
+  if(h.bpSys!=null&&h.bpDia!=null)p.push("BD "+h.bpSys+"/"+h.bpDia);
+  if(h.restHR!=null)p.push("Puls "+h.restHR);
+  if(h.hrv!=null)p.push("HRV "+h.hrv+" ms");
+  if(h.steps!=null)p.push(h.steps.toLocaleString("de-DE")+" Schritte");
+  return p.join(" · ");
+}
+function renderHealthCard(){
+  const isToday=curDate===todayStr();
+  $("healthCard").style.display=(isToday||draftHealth)?"block":"none";
+  $("healthActions").style.display=isToday?"flex":"none";
+  const s=healthSummary(draftHealth);
+  $("healthDisplay").textContent=s||(isToday?"Noch keine Werte für heute.":"Keine Gesundheitsdaten für diesen Tag.");
+}
+function parseHealthText(txt){
+  let o; try{o=JSON.parse(txt);}catch(e){return {err:"format"};}
+  if(!o||o.src!=="ksk-health")return {err:"nomatch"};
+  const h={};
+  ["sleepH","bpSys","bpDia","restHR","hrv","steps"].forEach(k=>{ if(typeof o[k]==="number"&&isFinite(o[k]))h[k]=o[k]; });
+  if(Object.keys(h).length===0)return {err:"empty"};
+  return {health:h,date:o.date};
+}
+function applyHealthData(h){
+  const e=DB.entries[curDate]||{pain:null,note:"",meds:[],ts:Date.now()};
+  e.health=h; e.ts=Date.now();
+  DB.entries[curDate]=e;
+  if(DB.deleted[curDate])delete DB.deleted[curDate];
+  draftHealth=h; save(); scheduleSync();
+  renderHealthCard(); $("deleteEntryBtn").style.display="block";
+}
+async function applyHealthFromClipboard(){
+  let txt="";
+  try{txt=await navigator.clipboard.readText();}
+  catch(e){toast("Zwischenablage nicht lesbar – Leserecht erlauben");return;}
+  const r=parseHealthText((txt||"").trim());
+  if(r.err){toast(r.err==="nomatch"?"Keine Health‑Daten – erst „1“ tippen":"Zwischenablage enthält keine gültigen Werte");return;}
+  applyHealthData(r.health);
+  toast("Gesundheitsdaten übernommen ✓");
+}
+$("healthFetch").addEventListener("click",()=>{toast("Kurzbefehl „KS‑Health“ wird gestartet …");location.href="shortcuts://run-shortcut?name=KS-Health";});
+$("healthApply").addEventListener("click",applyHealthFromClipboard);
+
 function loadEntryToForm(){
   $("logDate").value=curDate;
   const e=DB.entries[curDate];
@@ -621,15 +679,16 @@ function loadEntryToForm(){
     if(e.pain!=null){$("painRange").value=e.pain;painSet=true;}else{$("painRange").value=5;painSet=false;}
     $("note").value=e.note||"";
     draftMeds=(e.meds||[]).map(m=>({...m}));
+    draftHealth=e.health||null;
     $("deleteEntryBtn").style.display="block";
   }else{
-    $("painRange").value=5;painSet=false;$("note").value="";draftMeds=[];
+    $("painRange").value=5;painSet=false;$("note").value="";draftMeds=[];draftHealth=null;
     $("deleteEntryBtn").style.display="none";
   }
-  updateFace();renderLoggedMeds();
+  updateFace();renderLoggedMeds();renderHealthCard();
 }
 $("saveBtn").addEventListener("click",()=>{
-  if(!painSet && draftMeds.length===0 && !$("note").value.trim()){
+  if(!painSet && draftMeds.length===0 && !$("note").value.trim() && !draftHealth){
     toast("Bitte Stärke wählen (0 = schmerzfrei) oder Medikament/Notiz");return;
   }
   DB.entries[curDate]={
@@ -638,9 +697,10 @@ $("saveBtn").addEventListener("click",()=>{
     meds: draftMeds.map(m=>({name:m.name,dose:m.dose||"",time:m.time||""})),
     ts: Date.now()
   };
+  if(draftHealth) DB.entries[curDate].health=draftHealth;
   // drop fully-empty entries
   const e=DB.entries[curDate];
-  if(e.pain==null && !e.note && e.meds.length===0){delete DB.entries[curDate];}
+  if(e.pain==null && !e.note && e.meds.length===0 && !e.health){delete DB.entries[curDate];}
   else if(DB.deleted[curDate]){delete DB.deleted[curDate];} // re-created -> clear tombstone
   save();toast("Gespeichert ✓");$("deleteEntryBtn").style.display=DB.entries[curDate]?"block":"none";
   scheduleSync();
@@ -796,21 +856,30 @@ function openReport(){
   else if(firstEntry && firstEntry>b.from) startStr=firstEntry; // keine leeren Tage vor dem ersten Eintrag
   let dayRows="";
   if(!firstEntry){
-    dayRows=`<tr><td colspan="4" style="text-align:center;color:#888">Noch keine Einträge erfasst</td></tr>`;
+    dayRows=`<tr><td colspan="5" style="text-align:center;color:#888">Noch keine Einträge erfasst</td></tr>`;
   }else{
     let dcur=parseYmd(startStr), dend=parseYmd(b.to);
     while(dcur<=dend){
       const key=ymd(dcur), e=DB.entries[key];
       const dlabel=`${WD[dcur.getDay()]}, ${String(dcur.getDate()).padStart(2,"0")}.${String(dcur.getMonth()+1).padStart(2,"0")}.${dcur.getFullYear()}`;
-      let painCell="–", medCell="–", noteCell="", cls="";
+      let painCell="–", medCell="–", healthCell="–", noteCell="", cls="";
       if(e){
         if(e.pain==null)painCell="–";
         else if(e.pain===0)painCell='<span style="color:#2bb673;font-weight:700">0</span>';
         else painCell=`<b style="color:${painColor(e.pain)}">${e.pain}</b>/10`;
         if(e.meds&&e.meds.length)medCell=e.meds.map(m=>escapeH(m.name+(m.dose?" "+m.dose:"")+(m.time?" ("+m.time+")":""))).join("<br>");
+        if(e.health){
+          const H=e.health,hp=[];
+          if(H.sleepH!=null)hp.push(fmtNum(H.sleepH)+" h");
+          if(H.bpSys!=null&&H.bpDia!=null)hp.push(H.bpSys+"/"+H.bpDia);
+          if(H.restHR!=null)hp.push("P "+H.restHR);
+          if(H.hrv!=null)hp.push("HRV "+H.hrv);
+          if(H.steps!=null)hp.push(H.steps.toLocaleString("de-DE"));
+          if(hp.length)healthCell=hp.join("<br>");
+        }
         noteCell=escapeH(e.note||"");
       }else{cls=' class="empty"';}
-      dayRows+=`<tr${cls}><td style="white-space:nowrap">${dlabel}</td><td>${painCell}</td><td>${medCell}</td><td>${noteCell}</td></tr>`;
+      dayRows+=`<tr${cls}><td style="white-space:nowrap">${dlabel}</td><td>${painCell}</td><td>${medCell}</td><td>${healthCell}</td><td>${noteCell}</td></tr>`;
       dcur.setDate(dcur.getDate()+1);
     }
   }
@@ -835,7 +904,8 @@ function openReport(){
     <div class="rlegend">0<div class="rlegbar"></div>10 &nbsp;·&nbsp; <span style="color:#2bb673;font-weight:700">✓</span>=schmerzfrei &nbsp;·&nbsp; <span style="color:#0f766e">•</span>=Medikament</div>
     <div class="heat">${heat}</div>
     <h2>Tagesübersicht (alle Tage im Zeitraum)</h2>
-    <table class="data"><thead><tr><th style="width:26%">Datum</th><th style="width:12%">Stärke</th><th style="width:37%">Medikamente</th><th style="width:25%">Notiz / Auslöser</th></tr></thead><tbody>${dayRows}</tbody></table>
+    <div class="rlegend" style="margin-bottom:6px">Gesundheit: Schlaf h · Blutdruck · P = Ruhepuls · HRV (ms) · Schritte</div>
+    <table class="data"><thead><tr><th style="width:19%">Datum</th><th style="width:9%">Stärke</th><th style="width:25%">Medikamente</th><th style="width:24%">Gesundheit</th><th style="width:23%">Notiz</th></tr></thead><tbody>${dayRows}</tbody></table>
     <div class="rfoot">Erstellt mit dem Kopfschmerztagebuch (lokale App, offline). Selbstdokumentation des Patienten, keine ärztliche Diagnose.</div>
   </div>`;
 
@@ -907,12 +977,16 @@ $("exportJson").addEventListener("click",()=>{
   toast("Backup erstellt");
 });
 $("exportCsv").addEventListener("click",()=>{
-  const rows=[["Datum","Intensitaet_0_10","Status","Medikamente","Notiz"]];
+  const rows=[["Datum","Intensitaet_0_10","Status","Medikamente","Schlaf_h","BD_sys","BD_dia","Ruhepuls","HRV_ms","Schritte","Notiz"]];
   Object.keys(DB.entries).sort().forEach(k=>{
     const e=DB.entries[k];
     const meds=(e.meds||[]).map(m=>`${m.name}${m.dose?" "+m.dose:""}${m.time?" ("+m.time+")":""}`).join("; ");
     const status=e.pain==null?"":(e.pain===0?"schmerzfrei":"Kopfschmerz");
-    rows.push([k, e.pain==null?"":e.pain, status, meds, (e.note||"").replace(/\n/g," ")]);
+    const H=e.health||{};
+    rows.push([k, e.pain==null?"":e.pain, status, meds,
+      H.sleepH==null?"":H.sleepH, H.bpSys==null?"":H.bpSys, H.bpDia==null?"":H.bpDia,
+      H.restHR==null?"":H.restHR, H.hrv==null?"":H.hrv, H.steps==null?"":H.steps,
+      (e.note||"").replace(/\n/g," ")]);
   });
   const csv="﻿"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   download("kopfschmerztagebuch-"+todayStr()+".csv",csv,"text/csv");
