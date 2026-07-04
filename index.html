@@ -184,6 +184,9 @@
 
   .hint{font-size:13px;color:var(--ink-soft);line-height:1.45;margin-top:10px;}
   .divider{height:1px;background:var(--line);margin:16px 0;}
+  .syncstat{font-size:13px;font-weight:600;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;}
+  .syncstat.ok{color:var(--brand-ink);border-color:color-mix(in srgb,var(--brand) 30%,transparent);background:var(--brand-soft);}
+  .syncstat.err{color:#b4451c;border-color:#f0c39a;background:#fff4ec;}
 
   /* Modal */
   .modal-back{position:fixed;inset:0;z-index:60;background:rgba(20,20,25,.45);display:none;align-items:flex-end;justify-content:center;}
@@ -391,6 +394,18 @@
       </div>
 
       <div class="card">
+        <h2>Synchronisierung (iPhone ↔ iPad)</h2>
+        <p class="sub" style="margin-bottom:12px">Gleicht beide Geräte über einen privaten, Ende‑zu‑Ende‑verschlüsselten GitHub‑Gist ab. Im Gist liegen nur verschlüsselte Daten. Gib auf <b>beiden</b> Geräten dasselbe Token und dasselbe Sync‑Passwort ein.</p>
+        <div id="syncStatus" class="syncstat">Sync aus</div>
+        <label class="field"><span class="lbl">GitHub‑Token (Scope „gist")</span><input type="password" id="syncToken" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_…"></label>
+        <label class="field"><span class="lbl">Sync‑Passwort (auf beiden Geräten gleich)</span><input type="password" id="syncPass" autocomplete="off" placeholder="frei wählbar, gut merken"></label>
+        <button class="btn" id="syncConnect">Verbinden & erstmalig abgleichen</button>
+        <button class="btn ghost" id="syncNowBtn" style="margin-top:10px;display:none">Jetzt synchronisieren</button>
+        <button class="btn danger" id="syncDisconnect" style="margin-top:10px;display:none">Sync trennen (Daten bleiben)</button>
+        <div class="hint">Token erstellen: github.com → Settings → Developer settings → Personal access tokens → <b>Tokens (classic)</b> → „Generate new token", nur das Häkchen bei <b>gist</b> setzen. Das Token wird ausschließlich lokal gespeichert. Wichtig: Verlierst du das Sync‑Passwort, sind die abgeglichenen Daten nicht mehr entschlüsselbar.</div>
+      </div>
+
+      <div class="card">
         <h2>Daten & Sicherung</h2>
         <p class="sub" style="margin-bottom:12px">Alle Daten liegen ausschließlich auf diesem Gerät. Sichere regelmäßig per Backup‑Datei (JSON). Diese lässt sich wieder einspielen und z. B. in iCloud Drive / OneDrive ablegen.</p>
         <button class="btn ghost" id="exportJson">Backup sichern (JSON)</button>
@@ -401,7 +416,7 @@
         <button class="btn danger" id="wipeBtn">Alle Daten löschen</button>
       </div>
 
-      <p class="hint" style="text-align:center">Kopfschmerztagebuch · läuft offline · keine Cloud, keine Tracker · v1.0</p>
+      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.1</p>
     </section>
   </main>
 
@@ -453,14 +468,19 @@ const DEFAULTS={
     name:"", dob:"",
     doctor:"",
     theme:"auto", remOn:false, remTime:"20:00"
-  }
+  },
+  meta:{medsUpdated:0, profileUpdated:0},
+  deleted:{},
+  sync:{token:"", pass:"", gistId:"", lastSync:0, enabled:false}
 };
 
 let DB=load();
 function uid(){return Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);}
 function load(){
   try{const raw=localStorage.getItem(KEY); if(!raw) return structuredClone(DEFAULTS);
-    const d=JSON.parse(raw); d.entries=d.entries||{}; d.meds=d.meds||[]; d.settings={...DEFAULTS.settings,...(d.settings||{})}; return d;
+    const d=JSON.parse(raw); d.entries=d.entries||{}; d.meds=d.meds||[]; d.settings={...DEFAULTS.settings,...(d.settings||{})};
+    d.meta={...DEFAULTS.meta,...(d.meta||{})}; d.deleted=d.deleted||{}; d.sync={...DEFAULTS.sync,...(d.sync||{})};
+    return d;
   }catch(e){console.warn("load failed",e); return structuredClone(DEFAULTS);}
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast("Speichern fehlgeschlagen – Speicher voll?");}}
@@ -596,7 +616,7 @@ function customMedDialog(){
     <button class="btn secondary" id="cmSaveLib" style="margin-top:10px">Hinzufügen & als Stammmedikament merken</button>`);
   $("cmCancel").onclick=closeModal;
   $("cmAdd").onclick=()=>{const n=$("cmName").value.trim();if(!n)return toast("Name fehlt");draftMeds.push({name:n,dose:$("cmDose").value.trim(),time:$("cmTime").value});renderLoggedMeds();closeModal();};
-  $("cmSaveLib").onclick=()=>{const n=$("cmName").value.trim();if(!n)return toast("Name fehlt");const dose=$("cmDose").value.trim();draftMeds.push({name:n,dose,time:$("cmTime").value});DB.meds.push({id:uid(),name:n,dose});save();renderMedChips();renderLoggedMeds();closeModal();};
+  $("cmSaveLib").onclick=()=>{const n=$("cmName").value.trim();if(!n)return toast("Name fehlt");const dose=$("cmDose").value.trim();draftMeds.push({name:n,dose,time:$("cmTime").value});DB.meds.push({id:uid(),name:n,dose});DB.meta.medsUpdated=Date.now();save();renderMedChips();renderLoggedMeds();closeModal();scheduleSync();};
 }
 
 function loadEntryToForm(){
@@ -630,10 +650,13 @@ $("saveBtn").addEventListener("click",()=>{
   // drop fully-empty entries
   const e=DB.entries[curDate];
   if(e.pain==null && !e.free && !e.note && e.meds.length===0){delete DB.entries[curDate];}
+  else if(DB.deleted[curDate]){delete DB.deleted[curDate];} // re-created -> clear tombstone
   save();toast("Gespeichert ✓");$("deleteEntryBtn").style.display=DB.entries[curDate]?"block":"none";
+  scheduleSync();
 });
 $("deleteEntryBtn").addEventListener("click",()=>{
-  delete DB.entries[curDate];save();loadEntryToForm();toast("Eintrag gelöscht");
+  delete DB.entries[curDate];DB.deleted[curDate]=Date.now();save();loadEntryToForm();toast("Eintrag gelöscht");
+  scheduleSync();
 });
 
 /* ---------------- CALENDAR ---------------- */
@@ -828,9 +851,11 @@ function renderSettings(){
   $("remOn").checked=!!DB.settings.remOn;
   $("remTime").value=DB.settings.remTime||"20:00";
   renderMedLib();
+  renderSyncUI();
 }
 ["setName","setDob","setDoctor"].forEach(id=>$(id).addEventListener("input",()=>{
-  DB.settings.name=$("setName").value;DB.settings.dob=$("setDob").value;DB.settings.doctor=$("setDoctor").value;save();
+  DB.settings.name=$("setName").value;DB.settings.dob=$("setDob").value;DB.settings.doctor=$("setDoctor").value;
+  DB.meta.profileUpdated=Date.now();save();scheduleSync();
 }));
 $("setTheme").addEventListener("change",()=>{DB.settings.theme=$("setTheme").value;save();applyTheme();});
 $("remTime").addEventListener("change",()=>{DB.settings.remTime=$("remTime").value;save();scheduleReminder();});
@@ -852,7 +877,7 @@ function renderMedLib(){
     const row=document.createElement("div");row.className="listrow";
     row.innerHTML=`<div><div class="t">${escapeH(m.name)}</div><div class="s">${escapeH(m.dose||"")}</div></div>`;
     const del=document.createElement("button");del.className="del";del.style.color="#e0524a";del.style.fontWeight="600";del.style.fontSize="14px";del.textContent="Löschen";
-    del.onclick=()=>{DB.meds.splice(i,1);save();renderMedLib();renderMedChips();};
+    del.onclick=()=>{DB.meds.splice(i,1);DB.meta.medsUpdated=Date.now();save();renderMedLib();renderMedChips();scheduleSync();};
     row.appendChild(del);wrap.appendChild(row);
   });
 }
@@ -862,7 +887,7 @@ $("addMedBtn").addEventListener("click",()=>{
     <label class="field"><span class="lbl">Standard‑Dosis</span><input type="text" id="nmDose" placeholder="z. B. 50 mg"></label>
     <div class="row"><button class="btn ghost" id="nmCancel">Abbrechen</button><button class="btn" id="nmSave">Speichern</button></div>`);
   $("nmCancel").onclick=closeModal;
-  $("nmSave").onclick=()=>{const n=$("nmName").value.trim();if(!n)return toast("Name fehlt");DB.meds.push({id:uid(),name:n,dose:$("nmDose").value.trim()});save();renderMedLib();renderMedChips();closeModal();};
+  $("nmSave").onclick=()=>{const n=$("nmName").value.trim();if(!n)return toast("Name fehlt");DB.meds.push({id:uid(),name:n,dose:$("nmDose").value.trim()});DB.meta.medsUpdated=Date.now();save();renderMedLib();renderMedChips();closeModal();scheduleSync();};
 });
 
 /* ---------------- Export / Import ---------------- */
@@ -872,7 +897,9 @@ function download(filename,text,type){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 $("exportJson").addEventListener("click",()=>{
-  const data=JSON.stringify(DB,null,2);
+  const clone=JSON.parse(JSON.stringify(DB));
+  if(clone.sync){clone.sync.token="";clone.sync.pass="";} // never write secrets to a backup file
+  const data=JSON.stringify(clone,null,2);
   download("kopfschmerztagebuch-backup-"+todayStr()+".json",data,"application/json");
   toast("Backup erstellt");
 });
@@ -883,7 +910,7 @@ $("exportCsv").addEventListener("click",()=>{
     const meds=(e.meds||[]).map(m=>`${m.name}${m.dose?" "+m.dose:""}${m.time?" ("+m.time+")":""}`).join("; ");
     rows.push([k, e.pain==null?"":e.pain, (e.pain==null?"schmerzfrei":"Kopfschmerz"), meds, (e.note||"").replace(/\n/g," ")]);
   });
-  const csv="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+  const csv="﻿"+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   download("kopfschmerztagebuch-"+todayStr()+".csv",csv,"text/csv");
   toast("CSV erstellt");
 });
@@ -900,7 +927,7 @@ $("fileIn").addEventListener("change",e=>{
         <p class="sub" style="margin-top:8px;color:#e0524a">Achtung: Die aktuellen Daten auf diesem Gerät werden vollständig ersetzt.</p>
         <div class="row" style="margin-top:14px"><button class="btn ghost" id="impCancel">Abbrechen</button><button class="btn" id="impGo">Ersetzen</button></div>`);
       $("impCancel").onclick=closeModal;
-      $("impGo").onclick=()=>{DB=d;DB.entries=DB.entries||{};DB.meds=DB.meds||[];DB.settings={...DEFAULTS.settings,...(DB.settings||{})};save();applyTheme();renderSettings();loadEntryToForm();closeModal();toast("Backup wiederhergestellt");};
+      $("impGo").onclick=()=>{DB=d;DB.entries=DB.entries||{};DB.meds=DB.meds||[];DB.settings={...DEFAULTS.settings,...(DB.settings||{})};DB.meta={...DEFAULTS.meta,...(DB.meta||{})};DB.deleted=DB.deleted||{};DB.sync={...DEFAULTS.sync,...(DB.sync||{})};save();applyTheme();renderSettings();loadEntryToForm();closeModal();toast("Backup wiederhergestellt");};
     }catch(err){toast("Ungültige Backup‑Datei");}
     $("fileIn").value="";
   };
@@ -963,6 +990,155 @@ function setupInstall(){
   }catch(e){}
 }
 
+/* ---------------- Sync (E2E-encrypted, GitHub Gist) ---------------- */
+const GIST_FILE="kopfschmerz-sync.json";
+let syncTimer=null, syncing=false;
+
+function b64(bytes){const a=new Uint8Array(bytes);let s="";for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s);}
+function ub64(str){const bin=atob(str);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;}
+async function deriveKey(pass,salt){
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:150000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function encryptJSON(obj,pass){
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveKey(pass,salt);
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(JSON.stringify(obj)));
+  return JSON.stringify({v:1,alg:"AES-GCM",kdf:"PBKDF2-SHA256-150000",salt:b64(salt),iv:b64(iv),ct:b64(ct)});
+}
+async function decryptJSON(str,pass){
+  const o=JSON.parse(str);
+  const key=await deriveKey(pass,ub64(o.salt));
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub64(o.iv)},key,ub64(o.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+function syncPayload(){
+  return {entries:DB.entries, meds:DB.meds, deleted:DB.deleted||{},
+    profile:{name:DB.settings.name,dob:DB.settings.dob,doctor:DB.settings.doctor},
+    meta:DB.meta||{medsUpdated:0,profileUpdated:0}};
+}
+function mergeRemote(remote){
+  // tombstones
+  const del=Object.assign({},DB.deleted||{}), rdel=remote.deleted||{};
+  for(const k in rdel){if(!(k in del)||rdel[k]>del[k])del[k]=rdel[k];}
+  // entries (newest ts per day wins; respect tombstones)
+  const le=DB.entries||{}, re=remote.entries||{}, merged={};
+  new Set([...Object.keys(le),...Object.keys(re)]).forEach(k=>{
+    let cand=le[k];
+    if(re[k]&&(!cand||(re[k].ts||0)>(cand.ts||0)))cand=re[k];
+    if(!cand)return;
+    if((del[k]||0)>=(cand.ts||0))return; // deleted after last edit
+    merged[k]=cand;
+  });
+  DB.entries=merged; DB.deleted=del;
+  // meds library (whole-array, last edit wins)
+  const lmu=DB.meta.medsUpdated||0, rmu=(remote.meta&&remote.meta.medsUpdated)||0;
+  if(rmu>lmu&&Array.isArray(remote.meds)){DB.meds=remote.meds;DB.meta.medsUpdated=rmu;}
+  // profile (last edit wins)
+  const lpu=DB.meta.profileUpdated||0, rpu=(remote.meta&&remote.meta.profileUpdated)||0;
+  if(rpu>lpu&&remote.profile){DB.settings.name=remote.profile.name||"";DB.settings.dob=remote.profile.dob||"";DB.settings.doctor=remote.profile.doctor||"";DB.meta.profileUpdated=rpu;}
+  save();
+}
+
+function ghHeaders(){return {"Authorization":"Bearer "+DB.sync.token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};}
+async function findGist(){
+  const r=await fetch("https://api.github.com/gists?per_page=100",{headers:ghHeaders()});
+  if(r.status===401)throw new Error("Token ungültig");
+  if(!r.ok)throw new Error("GitHub-Fehler "+r.status);
+  const arr=await r.json();
+  const g=arr.find(x=>x.files&&x.files[GIST_FILE]);
+  return g?g.id:"";
+}
+async function pullRemote(){
+  if(!DB.sync.gistId)DB.sync.gistId=await findGist();
+  if(!DB.sync.gistId)return null;
+  const r=await fetch("https://api.github.com/gists/"+DB.sync.gistId,{headers:ghHeaders()});
+  if(r.status===404){DB.sync.gistId="";return null;}
+  if(!r.ok)throw new Error("Laden fehlgeschlagen "+r.status);
+  const g=await r.json(), f=g.files&&g.files[GIST_FILE];
+  if(!f)return null;
+  if(f.truncated&&f.raw_url){const rr=await fetch(f.raw_url);return await rr.text();}
+  return f.content;
+}
+async function pushRemote(encStr){
+  const body=JSON.stringify({description:"Kopfschmerztagebuch (verschlüsselt – nicht bearbeiten)",public:false,files:{[GIST_FILE]:{content:encStr}}});
+  if(DB.sync.gistId){
+    const r=await fetch("https://api.github.com/gists/"+DB.sync.gistId,{method:"PATCH",headers:ghHeaders(),body});
+    if(r.status===404){DB.sync.gistId="";return pushRemote(encStr);}
+    if(!r.ok)throw new Error("Speichern fehlgeschlagen "+r.status);
+  }else{
+    const r=await fetch("https://api.github.com/gists",{method:"POST",headers:ghHeaders(),body});
+    if(!r.ok)throw new Error("Anlegen fehlgeschlagen "+r.status);
+    DB.sync.gistId=(await r.json()).id;
+  }
+}
+function setSyncStatus(txt,cls){const el=$("syncStatus");if(!el)return;el.textContent=txt;el.className="syncstat"+(cls?" "+cls:"");}
+function refreshActive(){
+  const v=document.querySelector(".view.active");if(!v)return;
+  if(v.id==="v-log")loadEntryToForm();
+  else if(v.id==="v-cal")renderCalendar();
+  else if(v.id==="v-report")renderReport();
+  else if(v.id==="v-set"){renderSyncUI();renderMedLib();$("setName").value=DB.settings.name||"";$("setDob").value=DB.settings.dob||"";$("setDoctor").value=DB.settings.doctor||"";}
+}
+function scheduleSync(delay=2500){if(!DB.sync.enabled)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncNow(false),delay);}
+async function syncNow(manual){
+  if(!DB.sync.enabled||!DB.sync.token||!DB.sync.pass)return;
+  if(syncing)return; syncing=true; setSyncStatus("Synchronisiere …");
+  try{
+    const remoteEnc=await pullRemote();
+    if(remoteEnc){
+      let remote;
+      try{remote=await decryptJSON(remoteEnc,DB.sync.pass);}
+      catch(e){setSyncStatus("Entschlüsselung fehlgeschlagen – Sync‑Passwort prüfen (auf beiden Geräten gleich?).","err");if(manual)toast("Falsches Sync‑Passwort?");syncing=false;return;}
+      mergeRemote(remote);
+    }
+    const enc=await encryptJSON(syncPayload(),DB.sync.pass);
+    await pushRemote(enc);
+    DB.sync.lastSync=Date.now(); save();
+    setSyncStatus("Verbunden · zuletzt "+new Date(DB.sync.lastSync).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}),"ok");
+    refreshActive();
+    if(manual)toast("Synchronisiert ✓");
+  }catch(e){
+    setSyncStatus("Fehler: "+e.message,"err"); if(manual)toast(e.message);
+  }finally{syncing=false;}
+}
+function renderSyncUI(){
+  if(!$("syncToken"))return;
+  $("syncToken").value=DB.sync.token||"";
+  $("syncPass").value=DB.sync.pass||"";
+  const on=!!DB.sync.enabled;
+  $("syncNowBtn").style.display=on?"block":"none";
+  $("syncDisconnect").style.display=on?"block":"none";
+  $("syncConnect").style.display=on?"none":"block";
+  if(on){
+    if(DB.sync.lastSync)setSyncStatus("Verbunden · zuletzt "+new Date(DB.sync.lastSync).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}),"ok");
+    else setSyncStatus("Verbunden","ok");
+  }else setSyncStatus("Sync aus");
+}
+$("syncConnect").addEventListener("click",async ()=>{
+  const tok=$("syncToken").value.trim(), pass=$("syncPass").value;
+  if(!tok||!pass){toast("Token und Sync‑Passwort nötig");return;}
+  setSyncStatus("Prüfe Token …");
+  DB.sync.token=tok; DB.sync.pass=pass;
+  try{
+    const r=await fetch("https://api.github.com/user",{headers:ghHeaders()});
+    if(!r.ok){setSyncStatus("Token ungültig oder kein Zugriff ("+r.status+")","err");DB.sync.token="";return;}
+  }catch(e){setSyncStatus("Keine Verbindung zu GitHub","err");return;}
+  DB.sync.enabled=true; save();
+  await syncNow(true);
+  renderSyncUI();
+});
+$("syncNowBtn").addEventListener("click",()=>syncNow(true));
+$("syncToken").addEventListener("input",()=>{DB.sync.token=$("syncToken").value.trim();save();});
+$("syncPass").addEventListener("input",()=>{DB.sync.pass=$("syncPass").value;save();});
+$("syncDisconnect").addEventListener("click",()=>{
+  openModal(`<h3>Sync trennen?</h3><p class="sub">Token und Sync‑Passwort werden von <b>diesem</b> Gerät entfernt. Deine Einträge bleiben lokal erhalten, und der verschlüsselte Stand bleibt im Gist. Du kannst dich jederzeit wieder verbinden.</p>
+    <div class="row" style="margin-top:14px"><button class="btn ghost" id="sdCancel">Abbrechen</button><button class="btn danger" id="sdGo">Trennen</button></div>`);
+  $("sdCancel").onclick=closeModal;
+  $("sdGo").onclick=()=>{DB.sync={token:"",pass:"",gistId:"",lastSync:0,enabled:false};save();renderSyncUI();closeModal();toast("Sync getrennt");};
+});
+
 /* ---------------- Init ---------------- */
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme);
 applyTheme();
@@ -970,7 +1146,9 @@ setupInstall();
 renderMedChips();
 loadEntryToForm();
 scheduleReminder();
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)scheduleReminder();});
+renderSyncUI();
+if(DB.sync.enabled)syncNow(false);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){scheduleReminder();if(DB.sync.enabled)syncNow(false);}});
 
 // First-run gentle install hint when opened in Safari (not standalone)
 if(!window.navigator.standalone && !localStorage.getItem("ksk_seen")){
