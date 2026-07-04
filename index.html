@@ -143,9 +143,9 @@
   .cal-head .mname{font-size:20px;font-weight:650;}
   .cal-nav{display:flex;gap:8px;}
   .cal-nav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line-strong);background:var(--card);font-size:20px;color:var(--ink);display:flex;align-items:center;justify-content:center;}
-  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;}
+  .dow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:6px;}
   .dow span{text-align:center;font-size:11px;color:var(--ink-soft);font-weight:600;}
-  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
   .cell{aspect-ratio:1;border-radius:11px;border:1px solid var(--line);display:flex;flex-direction:column;
     align-items:center;justify-content:center;position:relative;font-size:14px;font-weight:600;background:var(--card);}
   .cell.empty{border:none;background:transparent;}
@@ -414,7 +414,7 @@
         <button class="btn danger" id="wipeBtn">Alle Daten löschen</button>
       </div>
 
-      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.2</p>
+      <p class="hint" style="text-align:center">Kopfschmerztagebuch · lokal gespeichert · optionaler Ende‑zu‑Ende‑verschlüsselter Sync · v1.2.1</p>
     </section>
   </main>
 
